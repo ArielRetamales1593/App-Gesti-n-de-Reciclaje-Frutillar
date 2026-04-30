@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reciclaje Frutillar - Gestión Full CRUD</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
+        .header-app { background: linear-gradient(135deg, #1e4d2b 0%, #2e7d32 100%); color: white; padding: 2rem 0; margin-bottom: 2rem; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .badge-agro { background-color: #dcfce7; color: #166534; }
+        .badge-fito { background-color: #fee2e2; color: #991b1b; }
+        /* Animación simple para resaltar cuando estamos editando */
+        .editing-mode { border: 2px solid #ffc107 !important; background-color: #fffdf5; }
+    </style>
+</head>
+<body>
+
+<header class="header-app text-center">
+    <div class="container">
+        <h1 class="display-6 fw-bold">Gestión de Reciclaje Frutillar</h1>
+        <p class="lead mb-0">Panel de Control Operativo</p>
+    </div>
+</header>
+
+<div class="container pb-5">
+    <div class="row g-4">
+        <!-- FORMULARIO DE REGISTRO / EDICIÓN -->
+        <div class="col-lg-4">
+            <div id="cardFormulario" class="card h-100">
+                <div id="tituloForm" class="card-header py-3 text-center text-success fw-bold">Nuevo Registro</div>
+                <div class="card-body">
+                    <form id="registroForm">
+                        <!-- Campo oculto para saber qué ID estamos editando -->
+                        <input type="hidden" id="editId">
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold small text-uppercase">Punto de Ubicación</label>
+                            <select id="punto" class="form-select" required>
+                                <option value="" selected disabled>Seleccione sector...</option>
+                                <option value="Sector Casma (Ruta 5)">Sector Casma (41°02'25''S, 73°07'15''W)</option>
+                                <option value="Frutillar Alto (V-20)">Frutillar Alto (41°07'10''S, 73°03'45''W)</option>
+                                <option value="Eje Ruta 5 (Llanquihue)">Eje Ruta 5 (41°11'30''S, 73°01'55''W)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold small text-uppercase">Tipos de Residuos</label>
+                            <div class="form-check p-2 border rounded mb-2 bg-white">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" value="ensilaje" id="chkAgro">
+                                <label class="form-check-label" for="chkAgro">Plásticos de ensilaje</label>
+                            </div>
+                            <div class="form-check p-2 border rounded bg-white">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" value="fitosanitarios" id="chkFito">
+                                <label class="form-check-label" for="chkFito">Envases fitosanitarios</label>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-light rounded-3 mb-4">
+                            <h6 class="mb-3 fw-bold small text-success text-uppercase">Asignación Logística</h6>
+                            <input type="text" id="conductor" class="form-control mb-2" placeholder="Nombre Conductor" required>
+                            <input type="text" id="vehiculo" class="form-control" placeholder="Patente / Vehículo" required>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" id="btnGuardar" class="btn btn-success flex-grow-1 fw-bold">Guardar</button>
+                            <button type="button" id="btnCancelar" class="btn btn-outline-secondary d-none" onclick="resetearFormulario()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLA DE DATOS CON ACCIONES -->
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <span>Historial de Rutas</span>
+                    <span class="badge bg-secondary" id="contadorRegistros">0 Registros</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr class="text-center">
+                                    <th class="ps-4 text-start">Ubicación</th>
+                                    <th>Residuos</th>
+                                    <th>Asignación</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaCuerpo">
+                                <!-- Datos inyectados por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /**
+     * CONFIGURACIÓN DE "BASE DE DATOS"
+     */
+    const dbKey = 'reciclaje_frutillar_db';
+
+    // Función para obtener datos de LocalStorage
+    const obtenerDatos = () => JSON.parse(localStorage.getItem(dbKey)) || [];
+
+    // Función para guardar datos en LocalStorage
+    const guardarDatos = (data) => localStorage.setItem(dbKey, JSON.stringify(data));
+
+    /**
+     * RENDERIZADO DE TABLA
+     */
+    function cargarTabla() {
+        const data = obtenerDatos();
+        const tbody = document.getElementById('tablaCuerpo');
+        document.getElementById('contadorRegistros').innerText = `${data.length} Registros`;
+        
+        tbody.innerHTML = '';
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-5 text-muted">No hay registros almacenados.</td></tr>';
+            return;
+        }
+
+        // Renderizado con botones de editar y borrar
+        data.forEach((item) => {
+            const row = `
+                <tr class="text-center">
+                    <td class="ps-4 text-start">
+                        <div class="fw-bold text-dark">${item.punto}</div>
+                        <small class="text-muted">${item.fecha}</small>
+                    </td>
+                    <td>
+                        ${item.residuos.includes('ensilaje') ? '<span class="badge badge-agro">Agro</span>' : ''}
+                        ${item.residuos.includes('fitosanitarios') ? '<span class="badge badge-fito">Fito</span>' : ''}
+                    </td>
+                    <td>
+                        <div class="small fw-bold">${item.conductor}</div>
+                        <div class="small font-monospace">${item.vehiculo}</div>
+                    </td>
+                    <td>
+                        <div class="btn-group shadow-sm">
+                            <button class="btn btn-sm btn-outline-primary" onclick="prepararEdicion('${item.id}')">Editar</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="eliminarRegistro('${item.id}')">Borrar</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML('afterbegin', row); // El más nuevo arriba
+        });
+    }
+
+    /**
+     * LÓGICA DE PERSISTENCIA (GUARDAR / ACTUALIZAR)
+     */
+    document.getElementById('registroForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const id = document.getElementById('editId').value;
+        const residuos = [];
+        if(document.getElementById('chkAgro').checked) residuos.push('ensilaje');
+        if(document.getElementById('chkFito').checked) residuos.push('fitosanitarios');
+
+        if(residuos.length === 0) return alert("Selecciona un tipo de residuo");
+
+        const registro = {
+            id: id || Date.now().toString(), // Si no hay ID, creamos uno nuevo
+            punto: document.getElementById('punto').value,
+            residuos: residuos,
+            conductor: document.getElementById('conductor').value,
+            vehiculo: document.getElementById('vehiculo').value,
+            fecha: new Date().toLocaleString('es-CL')
+        };
+
+        let data = obtenerDatos();
+
+        if (id) {
+            // MODO EDICIÓN: Reemplazar el registro existente
+            data = data.map(item => item.id === id ? registro : item);
+        } else {
+            // MODO CREACIÓN: Agregar al array
+            data.push(registro);
+        }
+
+        guardarDatos(data);
+        resetearFormulario();
+        cargarTabla();
+    });
+
+    /**
+     * FUNCIÓN: prepararEdicion
+     * Carga los datos de la tabla al formulario para ser cambiados.
+     */
+    function prepararEdicion(id) {
+        const data = obtenerDatos();
+        const item = data.find(i => i.id === id);
+
+        if (item) {
+            // Cambiar UI a modo edición
+            document.getElementById('editId').value = item.id;
+            document.getElementById('punto').value = item.punto;
+            document.getElementById('conductor').value = item.conductor;
+            document.getElementById('vehiculo').value = item.vehiculo;
+            document.getElementById('chkAgro').checked = item.residuos.includes('ensilaje');
+            document.getElementById('chkFito').checked = item.residuos.includes('fitosanitarios');
+
+            document.getElementById('tituloForm').innerText = "Editando Registro...";
+            document.getElementById('cardFormulario').classList.add('editing-mode');
+            document.getElementById('btnGuardar').innerText = "Actualizar Cambios";
+            document.getElementById('btnCancelar').classList.remove('d-none');
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // Subir al formulario
+        }
+    }
+
+    /**
+     * FUNCIÓN: eliminarRegistro
+     */
+    function eliminarRegistro(id) {
+        if (confirm("¿Estás seguro de que deseas borrar este pedido?")) {
+            const data = obtenerDatos().filter(item => item.id !== id);
+            guardarDatos(data);
+            cargarTabla();
+        }
+    }
+
+    /**
+     * FUNCIÓN: resetearFormulario
+     * Limpia todo y vuelve al estado de "Nuevo Registro"
+     */
+    function resetearFormulario() {
+        document.getElementById('registroForm').reset();
+        document.getElementById('editId').value = "";
+        document.getElementById('tituloForm').innerText = "Nuevo Registro";
+        document.getElementById('cardFormulario').classList.remove('editing-mode');
+        document.getElementById('btnGuardar').innerText = "Guardar";
+        document.getElementById('btnCancelar').classList.add('d-none');
+    }
+
+    // Inicialización
+    cargarTabla();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
